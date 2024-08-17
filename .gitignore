@@ -7,3 +7,6 @@ outputs/
 *.pyc
 *.tar
 .DS_Store
+*.mp4
+*.mpg
+vsr_trlrwlrs2lrs3vox2avsp_base.pth

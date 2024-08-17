@@ -6,6 +6,10 @@ import torchaudio
 import torchvision
 from datamodule.transforms import AudioTransform, VideoTransform
 from datamodule.av_dataset import cut_or_pad
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"CUDA device count: {torch.cuda.device_count()}")
+if torch.cuda.is_available():
+    print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
 
 
 class InferencePipeline(torch.nn.Module):
@@ -23,7 +27,7 @@ class InferencePipeline(torch.nn.Module):
             elif detector == "retinaface":
                 from preparation.detectors.retinaface.detector import LandmarksDetector
                 from preparation.detectors.retinaface.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector(device="cuda:0")
+                self.landmarks_detector = LandmarksDetector(device="cpu")
                 self.video_process = VideoProcess(convert_gray=False)
             self.video_transform = VideoTransform(subset="test")
 

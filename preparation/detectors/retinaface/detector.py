@@ -3,36 +3,53 @@
 
 # Copyright 2021 Imperial College London (Pingchuan Ma)
 # Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
+import sys
+import os
+
+print(f"Current working directory: {os.getcwd()}")
+print(f"Contents of current directory: {os.listdir('.')}")
+print(f"Contents of preparation directory: {os.listdir('preparation')}")
 
 import warnings
+import sys
+print(f"Python version: {sys.version}")
+print(f"Python path: {sys.path}")
 
-from ibug.face_alignment import FANPredictor
-from ibug.face_detection import RetinaFacePredictor
+try:
+    import torch
+    print(f"PyTorch version: {torch.__version__}")
+except ImportError as e:
+    print(f"Error importing torch: {e}")
+
+try:
+    from face_alignment import FaceAlignment, LandmarksType
+    print("Successfully imported face_alignment")
+except ImportError as e:
+    print(f"Error importing face_alignment: {e}")
 
 warnings.filterwarnings("ignore")
 
-
 class LandmarksDetector:
-    def __init__(self, device="cuda:0", model_name="resnet50"):
-        self.face_detector = RetinaFacePredictor(
-            device=device,
-            threshold=0.8,
-            model=RetinaFacePredictor.get_model(model_name),
-        )
-        self.landmark_detector = FANPredictor(device=device, model=None)
-
+    def __init__(self, device="cpu", model_name="resnet50"):
+        self.device = device
+        self.face_alignment = FaceAlignment(LandmarksType.TWO_D, device=device)
+        
     def __call__(self, video_frames):
         landmarks = []
         for frame in video_frames:
-            detected_faces = self.face_detector(frame, rgb=False)
-            face_points, _ = self.landmark_detector(frame, detected_faces, rgb=True)
-            if len(detected_faces) == 0:
+            # FaceAlignment can detect faces and predict landmarks in one step
+            face_landmarks = self.face_alignment.get_landmarks(frame)
+            
+            if face_landmarks is None or len(face_landmarks) == 0:
                 landmarks.append(None)
             else:
-                max_id, max_size = 0, 0
-                for idx, bbox in enumerate(detected_faces):
-                    bbox_size = (bbox[2] - bbox[0]) + (bbox[3] - bbox[1])
-                    if bbox_size > max_size:
-                        max_id, max_size = idx, bbox_size
-                landmarks.append(face_points[max_id])
+                # If multiple faces are detected, choose the largest one
+                if len(face_landmarks) > 1:
+                    max_id = max(range(len(face_landmarks)), 
+                                 key=lambda i: (face_landmarks[i][:,0].max() - face_landmarks[i][:,0].min()) * 
+                                               (face_landmarks[i][:,1].max() - face_landmarks[i][:,1].min()))
+                    landmarks.append(face_landmarks[max_id])
+                else:
+                    landmarks.append(face_landmarks[0])
+        
         return landmarks
