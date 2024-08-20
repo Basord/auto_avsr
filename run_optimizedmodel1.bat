@@ -15,6 +15,9 @@ REM Set CUDA optimizations
 set PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 set CUDA_STREAM_PRIORITY=high
 
+REM Preload CUDA
+set CUDA_CACHE_PATH=%TEMP%\cuda_cache
+
 REM Change to the directory containing your Python script
 cd /d "%~dp0"
 
