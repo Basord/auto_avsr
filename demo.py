@@ -27,7 +27,7 @@ class InferencePipeline(torch.nn.Module):
             elif detector == "retinaface":
                 from preparation.detectors.retinaface.detector import LandmarksDetector
                 from preparation.detectors.retinaface.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector(device="cpu")
+                self.landmarks_detector = LandmarksDetector(device="cuda:0")
                 self.video_process = VideoProcess(convert_gray=False)
             self.video_transform = VideoTransform(subset="test")
 

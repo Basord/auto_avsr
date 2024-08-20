@@ -30,7 +30,7 @@ except ImportError as e:
 warnings.filterwarnings("ignore")
 
 class LandmarksDetector:
-    def __init__(self, device="cpu", model_name="resnet50"):
+    def __init__(self, device="cuda:0", model_name="resnet50"):
         self.device = device
         self.face_alignment = FaceAlignment(LandmarksType.TWO_D, device=device)
         
