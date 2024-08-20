@@ -1,107 +1,51 @@
-import os
-import hydra
-
+import warnings
 import torch
-import torchaudio
-import torchvision
-from datamodule.transforms import AudioTransform, VideoTransform
-from datamodule.av_dataset import cut_or_pad
-print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"CUDA device count: {torch.cuda.device_count()}")
-if torch.cuda.is_available():
-    print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
+import numpy as np
+from face_alignment import FaceAlignment, LandmarksType
 
+warnings.filterwarnings("ignore")
 
-class InferencePipeline(torch.nn.Module):
-    def __init__(self, cfg, detector="retinaface"):
-        super(InferencePipeline, self).__init__()
-        self.modality = cfg.data.modality
-        if self.modality in ["audio", "audiovisual"]:
-            self.audio_transform = AudioTransform(subset="test")
-        if self.modality in ["video", "audiovisual"]:
-            if detector == "mediapipe":
-                from preparation.detectors.mediapipe.detector import LandmarksDetector
-                from preparation.detectors.mediapipe.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector()
-                self.video_process = VideoProcess(convert_gray=False)
-            elif detector == "retinaface":
-                from preparation.detectors.retinaface.detector import LandmarksDetector
-                from preparation.detectors.retinaface.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector(device="cuda:0")
-                self.video_process = VideoProcess(convert_gray=False)
-            self.video_transform = VideoTransform(subset="test")
+class LandmarksDetector:
+    def __init__(self, device="cuda:0", batch_size=32):
+        self.device = device
+        self.batch_size = batch_size
+        self.face_alignment = FaceAlignment(LandmarksType.TWO_D, device=device, flip_input=False)
+        
+        # Use DataParallel if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            self.face_alignment = torch.nn.DataParallel(self.face_alignment)
+        
+    def __call__(self, video_frames):
+        landmarks = []
+        
+        # Convert video_frames to torch tensor and move to GPU
+        video_frames = torch.from_numpy(video_frames).to(self.device)
+        
+        # Process frames in batches
+        for i in range(0, len(video_frames), self.batch_size):
+            batch = video_frames[i:i+self.batch_size]
+            batch_landmarks = self.face_alignment.get_landmarks_from_batch(batch)
+            
+            for face_landmarks in batch_landmarks:
+                if face_landmarks is None or len(face_landmarks) == 0:
+                    landmarks.append(None)
+                else:
+                    if len(face_landmarks) > 1:
+                        max_id = max(range(len(face_landmarks)), 
+                                     key=lambda i: (face_landmarks[i][:,0].max() - face_landmarks[i][:,0].min()) * 
+                                                   (face_landmarks[i][:,1].max() - face_landmarks[i][:,1].min()))
+                        landmarks.append(face_landmarks[max_id])
+                    else:
+                        landmarks.append(face_landmarks[0])
+        
+        return landmarks
 
-        if cfg.data.modality in ["audio", "video"]:
-            from lightning import ModelModule
-        elif cfg.data.modality == "audiovisual":
-            from lightning_av import ModelModule
-        self.modelmodule = ModelModule(cfg)
-        self.modelmodule.model.load_state_dict(torch.load(cfg.pretrained_model_path, map_location=lambda storage, loc: storage))
-        self.modelmodule.eval()
+def apply_landmarks_to_frame(frame, landmarks):
+    # Implement your logic to apply landmarks to the frame
+    return frame
 
-
-    def forward(self, data_filename):
-        data_filename = os.path.abspath(data_filename)
-        assert os.path.isfile(data_filename), f"data_filename: {data_filename} does not exist."
-
-        if self.modality in ["audio", "audiovisual"]:
-            audio, sample_rate = self.load_audio(data_filename)
-            audio = self.audio_process(audio, sample_rate)
-            audio = audio.transpose(1, 0)
-            audio = self.audio_transform(audio)
-
-        if self.modality in ["video", "audiovisual"]:
-            video = self.load_video(data_filename)
-            landmarks = self.landmarks_detector(video)
-            video = self.video_process(video, landmarks)
-            video = torch.tensor(video)
-            video = video.permute((0, 3, 1, 2))
-            video = self.video_transform(video)
-
-        if self.modality == "video":
-            with torch.no_grad():
-                transcript = self.modelmodule(video)
-        elif self.modality == "audio":
-            with torch.no_grad():
-                transcript = self.modelmodule(audio)
-
-        elif self.modality == "audiovisual":
-            print(len(audio), len(video))
-            assert 530 < len(audio) // len(video) < 670, "The video frame rate should be between 24 and 30 fps."
-
-            rate_ratio = len(audio) // len(video)
-            if rate_ratio == 640:
-                pass
-            else:
-                print(f"The ideal video frame rate is set to 25 fps, but the current frame rate ratio, calculated as {len(video)*16000/len(audio):.1f}, which may affect the performance.")
-                audio = cut_or_pad(audio, len(video) * 640)
-            with torch.no_grad():
-                transcript = self.modelmodule(video, audio)
-
-        return transcript
-
-    def load_audio(self, data_filename):
-        waveform, sample_rate = torchaudio.load(data_filename, normalize=True)
-        return waveform, sample_rate
-
-    def load_video(self, data_filename):
-        return torchvision.io.read_video(data_filename, pts_unit="sec")[0].numpy()
-
-    def audio_process(self, waveform, sample_rate, target_sample_rate=16000):
-        if sample_rate != target_sample_rate:
-            waveform = torchaudio.functional.resample(
-                waveform, sample_rate, target_sample_rate
-            )
-        waveform = torch.mean(waveform, dim=0, keepdim=True)
-        return waveform
-
-
-@hydra.main(version_base="1.3", config_path="configs", config_name="config")
-def main(cfg):
-    pipeline = InferencePipeline(cfg)
-    transcript = pipeline(cfg.file_path)
-    print(f"transcript: {transcript}")
-
-
-if __name__ == "__main__":
-    main()
+def load_and_process_video(video_frames, device="cuda:0", batch_size=128):
+    detector = LandmarksDetector(device=device, batch_size=batch_size)
+    landmarks = detector(video_frames)
+    processed_frames = [apply_landmarks_to_frame(frame, lm) for frame, lm in zip(video_frames, landmarks)]
+    return processed_frames
