@@ -31,24 +31,22 @@ class LimitedSizeDict(OrderedDict):
 class InferencePipeline(torch.nn.Module):
     def __init__(self, cfg, detector="retinaface"):
         super(InferencePipeline, self).__init__()
-        self.cfg = cfg
         self.modality = cfg.data.modality
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device_string = "cuda:0" if torch.cuda.is_available() else "cpu"
         
         if self.modality in ["audio", "audiovisual"]:
             self.audio_transform = AudioTransform(subset="test")
         if self.modality in ["video", "audiovisual"]:
             if detector == "mediapipe":
-                print("Using MediaPipe for face detection and landmark estimation")
                 from preparation.detectors.mediapipe.detector import LandmarksDetector
                 from preparation.detectors.mediapipe.video_process import VideoProcess
                 self.landmarks_detector = LandmarksDetector()
                 self.video_process = VideoProcess(convert_gray=False)
             elif detector == "retinaface":
-                print("Using RetinaFace for face detection and landmark estimation")
                 from preparation.detectors.retinaface.detector import LandmarksDetector
                 from preparation.detectors.retinaface.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector(device=self.device)
+                self.landmarks_detector = LandmarksDetector(device=self.device_string)
                 self.video_process = VideoProcess(convert_gray=False)
             self.video_transform = VideoTransform(subset="test")
 
@@ -58,11 +56,11 @@ class InferencePipeline(torch.nn.Module):
             from lightning_av import ModelModule
         
         self.modelmodule = ModelModule(cfg).to(self.device)
-        self.modelmodule.model.load_state_dict(torch.load(cfg.pretrained_model_path, map_location=self.device, weights_only=True))
+        self.modelmodule.model.load_state_dict(torch.load(cfg.pretrained_model_path, map_location=self.device))
         self.modelmodule.eval()
 
         # Initialize mixed precision scaler
-        self.scaler = torch.amp.GradScaler('cuda') if torch.cuda.is_available() else torch.amp.GradScaler('cpu')
+        self.scaler = GradScaler()
 
         # Initialize landmark cache with a limit of 10 entries
         self.landmark_cache = LimitedSizeDict(size_limit=10)
@@ -78,7 +76,7 @@ class InferencePipeline(torch.nn.Module):
         if self.modality in ["video", "audiovisual"]:
             video = self.load_and_process_video(data_filename)
 
-        with torch.amp.autocast(device_type='cuda' if torch.cuda.is_available() else 'cpu'):
+        with autocast():
             if self.modality == "video":
                 transcript = self.modelmodule(video)
             elif self.modality == "audio":
@@ -137,12 +135,7 @@ def main(cfg):
     pr.enable()
     
     start_time = time.time()
-    pipeline = InferencePipeline(cfg, detector="mediapipe")
-    
-    # Load the model weights with weights_only=True
-    state_dict = torch.load(cfg.pretrained_model_path, map_location='cpu', weights_only=True)
-    pipeline.modelmodule.model.load_state_dict(state_dict)
-    
+    pipeline = InferencePipeline(cfg)
     transcript = pipeline(cfg.file_path)
     end_time = time.time()
     
