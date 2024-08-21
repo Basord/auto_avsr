@@ -3,7 +3,6 @@ import hydra
 import torch
 import torchaudio
 import torchvision
-import numpy as np
 from datamodule.transforms import AudioTransform, VideoTransform
 from datamodule.av_dataset import cut_or_pad
 from torch.cuda.amp import autocast, GradScaler
@@ -43,7 +42,7 @@ class InferencePipeline(torch.nn.Module):
                 print("Using MediaPipe for face detection and landmark estimation")
                 from preparation.detectors.mediapipe.detector import LandmarksDetector
                 from preparation.detectors.mediapipe.video_process import VideoProcess
-                self.landmarks_detector = LandmarksDetector(batch_size=32, num_threads=4)
+                self.landmarks_detector = LandmarksDetector()
                 self.video_process = VideoProcess(convert_gray=False)
             elif detector == "retinaface":
                 print("Using RetinaFace for face detection and landmark estimation")
@@ -106,8 +105,10 @@ class InferencePipeline(torch.nn.Module):
     def load_and_process_video(self, data_filename):
         video = torchvision.io.read_video(data_filename, pts_unit="sec")[0].numpy()
         
+        # Generate a unique key for this video
         video_hash = hashlib.md5(video.tobytes()).hexdigest()
         
+        # Check if landmarks are cached
         if video_hash in self.landmark_cache:
             landmarks = self.landmark_cache[video_hash]
             print("Using cached landmarks")
@@ -116,23 +117,7 @@ class InferencePipeline(torch.nn.Module):
             self.landmark_cache[video_hash] = landmarks
             print("Computed and cached new landmarks")
         
-        # Process video in batches
-        batch_size = 32  # Adjust based on your GPU memory
-        processed_batches = []
-        for i in range(0, len(video), batch_size):
-            batch = video[i:i+batch_size]
-            batch_landmarks = landmarks[i:i+batch_size]
-            try:
-                processed_batch = self.video_process(batch, batch_landmarks)
-                processed_batches.append(processed_batch)
-            except Exception as e:
-                print(f"Error processing batch {i//batch_size}: {str(e)}")
-                continue
-        
-        if not processed_batches:
-            raise ValueError("No video batches were successfully processed")
-        
-        video = np.concatenate(processed_batches, axis=0)
+        video = self.video_process(video, landmarks)
         video = torch.tensor(video)
         video = video.permute((0, 3, 1, 2))
         video = self.video_transform(video)
