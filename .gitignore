@@ -12,3 +12,4 @@ outputs/
 vsr_trlrwlrs2lrs3vox2avsp_base.pth
 vsr_trlrs3vox2_base.pth
 vsr_trlrs3_base.pth
+fairseq/
