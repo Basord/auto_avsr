@@ -29,7 +29,7 @@ class LimitedSizeDict(OrderedDict):
                 self.popitem(last=False)
 
 class InferencePipeline(torch.nn.Module):
-    def __init__(self, cfg, detector="retinaface"):
+    def __init__(self, cfg, detector="mediapipe"):
         super(InferencePipeline, self).__init__()
         self.cfg = cfg
         self.modality = cfg.data.modality
