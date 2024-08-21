@@ -4,13 +4,7 @@ import numpy as np
 class LandmarksDetector:
     def __init__(self):
         self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        self.face_mesh = self.mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, min_detection_confidence=0.5)
 
     def __call__(self, video_frames):
         return self.detect(video_frames)
@@ -26,15 +20,15 @@ class LandmarksDetector:
             face_landmarks = results.multi_face_landmarks[0].landmark
             ih, iw, _ = frame.shape
             
-            # Extract specific landmarks that correspond to RetinaFace's 68 landmarks
-            landmark_indices = [
-                162, 234, 93, 58, 172, 136, 149, 148, 152, 377, 378, 365, 397, 288, 323, 454, 389, 71, 63,
-                105, 66, 107, 336, 296, 334, 293, 301, 168, 197, 5, 4, 75, 97, 2, 326, 305, 33, 160, 158, 133,
-                153, 144, 362, 385, 387, 263, 373, 380, 61, 39, 37, 0, 267, 269, 291, 405, 314, 17, 84, 181,
-                78, 82, 13, 312, 308, 317, 14, 87
+            # Extract key points similar to RetinaFace (eyes, nose, mouth)
+            key_points = [
+                [int(face_landmarks[33].x * iw), int(face_landmarks[33].y * ih)],  # Left eye
+                [int(face_landmarks[263].x * iw), int(face_landmarks[263].y * ih)],  # Right eye
+                [int(face_landmarks[1].x * iw), int(face_landmarks[1].y * ih)],  # Nose
+                [int(face_landmarks[61].x * iw), int(face_landmarks[61].y * ih)],  # Mouth left
+                [int(face_landmarks[291].x * iw), int(face_landmarks[291].y * ih)]  # Mouth right
             ]
-            landmark_points = np.array([[int(face_landmarks[idx].x * iw), int(face_landmarks[idx].y * ih)] for idx in landmark_indices])
             
-            landmarks.append(landmark_points)
+            landmarks.append(np.array(key_points))
         
         return landmarks
