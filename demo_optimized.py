@@ -12,6 +12,8 @@ import io
 import time
 import hashlib
 from collections import OrderedDict
+import json
+from pathlib import Path
 
 class LimitedSizeDict(OrderedDict):
     def __init__(self, *args, **kwds):
@@ -146,8 +148,18 @@ def main(cfg):
     transcript = pipeline(cfg.file_path)
     end_time = time.time()
     
-    print(f"transcript: {transcript}")
-    print(f"Total execution time: {end_time - start_time:.2f} seconds")
+    # Write transcript to a JSON file in C:\Users\Bondo\avsr2
+    output_dir = r'C:\Users\Bondo\avsr2'
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, 'transcript.json')
+    
+    with open(output_file, 'w') as f:
+        json.dump({
+            'transcript': transcript,
+            'execution_time': end_time - start_time
+        }, f)
+    
+    print(f"Transcript written to {output_file}")
 
     pr.disable()
     s = io.StringIO()
