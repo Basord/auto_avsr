@@ -22,5 +22,5 @@ REM Change to the directory containing your Python script
 cd /d "%~dp0"
 
 REM Run the optimized Python script with arguments
-python demo_optimized.py data.modality=video pretrained_model_path=vsr_trlrwlrs2lrs3vox2avsp_base.pth file_path=Nuc720.mp4
+python demo_optimized.py data.modality=video pretrained_model_path=vsr_trlrwlrs2lrs3vox2avsp_base.pth file_path=Realityshow720v-1.webm
 
