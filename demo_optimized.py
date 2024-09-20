@@ -12,6 +12,15 @@ import io
 import time
 import hashlib
 from collections import OrderedDict
+import json
+import traceback
+
+# Add the directory containing the script to the Python path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
+
+# Change the working directory to the script's directory
+os.chdir(script_dir)
 
 class LimitedSizeDict(OrderedDict):
     def __init__(self, *args, **kwds):
@@ -32,8 +41,8 @@ class InferencePipeline(torch.nn.Module):
     def __init__(self, cfg, detector="retinaface"):
         super(InferencePipeline, self).__init__()
         self.modality = cfg.data.modality
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.device_string = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = torch.device("cpu")
+        self.device_string = "cpu"
         
         if self.modality in ["audio", "audiovisual"]:
             self.audio_transform = AudioTransform(subset="test")
@@ -135,12 +144,46 @@ def main(cfg):
     pr.enable()
     
     start_time = time.time()
-    pipeline = InferencePipeline(cfg)
-    transcript = pipeline(cfg.file_path)
-    end_time = time.time()
     
-    print(f"transcript: {transcript}")
-    print(f"Total execution time: {end_time - start_time:.2f} seconds")
+    try:
+        pipeline = InferencePipeline(cfg)
+        transcript = pipeline(cfg.file_path)
+        end_time = time.time()
+        
+        # Write transcript to a JSON file in C:\Users\Bondo\avsr2
+        output_dir = r'C:\Users\Bondo\avsr2'
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, 'transcript.json')
+        
+        with open(output_file, 'w') as f:
+            json.dump({
+                'status': 'success',
+                'transcript': transcript,
+                'execution_time': end_time - start_time
+            }, f)
+        
+        print(f"Transcript written to {output_file}")
+        print(f"transcript: {transcript}")
+        print(f"Total execution time: {end_time - start_time:.2f} seconds")
+
+    except Exception as e:
+        end_time = time.time()
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        output_dir = r'C:\Users\Bondo\avsr2'
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, 'transcript.json')
+        
+        with open(output_file, 'w') as f:
+            json.dump({
+                'status': 'error',
+                'error_message': error_message,
+                'error_traceback': error_traceback,
+                'execution_time': end_time - start_time
+            }, f)
+        
+        print(f"Error occurred. Details written to {output_file}")
 
     pr.disable()
     s = io.StringIO()
@@ -153,23 +196,23 @@ def main(cfg):
 if __name__ == "__main__":
     main()
 
-    def load_and_process_video(self, data_filename):
-        video = torchvision.io.read_video(data_filename, pts_unit="sec")[0].numpy()
-        
-        # Generate a unique key for this video
-        video_hash = hashlib.md5(video.tobytes()).hexdigest()
-        
-        # Check if landmarks are cached
-        if video_hash in self.landmark_cache:
-            landmarks = self.landmark_cache[video_hash]
-            print("Using cached landmarks")
-        else:
-            landmarks = self.landmarks_detector(video)
-            self.landmark_cache[video_hash] = landmarks
-            print("Computed and cached new landmarks")
-        
-        video = self.video_process(video, landmarks)
-        video = torch.tensor(video)
-        video = video.permute((0, 3, 1, 2))
-        video = self.video_transform(video)
-        return video.to(self.device)
+def load_and_process_video(self, data_filename):
+    video = torchvision.io.read_video(data_filename, pts_unit="sec")[0].numpy()
+    
+    # Generate a unique key for this video
+    video_hash = hashlib.md5(video.tobytes()).hexdigest()
+    
+    # Check if landmarks are cached
+    if video_hash in self.landmark_cache:
+        landmarks = self.landmark_cache[video_hash]
+        print("Using cached landmarks")
+    else:
+        landmarks = self.landmarks_detector(video)
+        self.landmark_cache[video_hash] = landmarks
+        print("Computed and cached new landmarks")
+    
+    video = self.video_process(video, landmarks)
+    video = torch.tensor(video)
+    video = video.permute((0, 3, 1, 2))
+    video = self.video_transform(video)
+    return video.to(self.device)
