@@ -14,6 +14,7 @@ import hashlib
 from collections import OrderedDict
 import json
 from pathlib import Path
+import traceback
 
 class LimitedSizeDict(OrderedDict):
     def __init__(self, *args, **kwds):
@@ -139,27 +140,49 @@ def main(cfg):
     pr.enable()
     
     start_time = time.time()
-    pipeline = InferencePipeline(cfg, detector="mediapipe")
     
-    # Load the model weights with weights_only=True
-    state_dict = torch.load(cfg.pretrained_model_path, map_location='cpu', weights_only=True)
-    pipeline.modelmodule.model.load_state_dict(state_dict)
-    
-    transcript = pipeline(cfg.file_path)
-    end_time = time.time()
-    
-    # Write transcript to a JSON file in C:\Users\Bondo\avsr2
-    output_dir = r'C:\Users\Bondo\avsr2'
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, 'transcript.json')
-    
-    with open(output_file, 'w') as f:
-        json.dump({
-            'transcript': transcript,
-            'execution_time': end_time - start_time
-        }, f)
-    
-    print(f"Transcript written to {output_file}")
+    try:
+        pipeline = InferencePipeline(cfg, detector="mediapipe")
+        
+        # Load the model weights with weights_only=True
+        state_dict = torch.load(cfg.pretrained_model_path, map_location='cpu', weights_only=True)
+        pipeline.modelmodule.model.load_state_dict(state_dict)
+        
+        transcript = pipeline(cfg.file_path)
+        end_time = time.time()
+        
+        # Write transcript to a JSON file in C:\Users\Bondo\avsr2
+        output_dir = r'C:\Users\Bondo\avsr2'
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, 'transcript.json')
+        
+        with open(output_file, 'w') as f:
+            json.dump({
+                'status': 'success',
+                'transcript': transcript,
+                'execution_time': end_time - start_time
+            }, f)
+        
+        print(f"Transcript written to {output_file}")
+
+    except Exception as e:
+        end_time = time.time()
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        output_dir = r'C:\Users\Bondo\avsr2'
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, 'transcript.json')
+        
+        with open(output_file, 'w') as f:
+            json.dump({
+                'status': 'error',
+                'error_message': error_message,
+                'error_traceback': error_traceback,
+                'execution_time': end_time - start_time
+            }, f)
+        
+        print(f"Error occurred. Details written to {output_file}")
 
     pr.disable()
     s = io.StringIO()
